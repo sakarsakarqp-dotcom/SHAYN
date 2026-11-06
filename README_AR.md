@@ -29,7 +29,8 @@ npm run db:init
 npm start
 ```
 
-5. افتح `http://localhost:3000`.
+5. نفّذ `npm run check` للتحقق من صياغة ملفات JavaScript.
+6. افتح `http://localhost:3000`.
 
 لا ترفع ملف `.env` إلى GitHub ولا ترسل كلمات المرور أو مفاتيح الاتصال في المحادثات.
 

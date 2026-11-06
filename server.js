@@ -208,6 +208,9 @@ app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')))
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:process.env.NODE_ENV==='production'?'حدث خطأ داخلي':'حدث خطأ داخلي: '+err.message});});
 if(process.argv.includes('--init-db')) initDb().then(()=>pool.end()).catch(e=>{console.error(e);process.exit(1);});
 else {
-  if(!JWT_SECRET || JWT_SECRET.length<32 || JWT_SECRET.includes('replace-with')) console.warn('WARNING: Set a strong JWT_SECRET before using authentication.');
+  if(!JWT_SECRET || JWT_SECRET.length<32 || JWT_SECRET.includes('replace-with')) {
+    console.error('JWT_SECRET must be set to a unique random value of at least 32 characters.');
+    process.exit(1);
+  }
   app.listen(PORT,()=>console.log(`SHAYN listening on port ${PORT}`));
 }

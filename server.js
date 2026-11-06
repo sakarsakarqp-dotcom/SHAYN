@@ -58,7 +58,7 @@ const CATEGORY_NAMES = [
 const safeUser = u => ({ id: u.id, name: u.name, email: u.email, role: u.role, bio: u.bio, created_at: u.created_at });
 const asyncRoute = fn => (req,res,next) => Promise.resolve(fn(req,res,next)).catch(next);
 async function auth(req,res,next) {
-  const token = (req.headers.authorization || '').replace(/^Bearer\\s+/i,'');
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i,'');
   if (!token) return res.status(401).json({ error: 'يلزم تسجيل الدخول' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -101,6 +101,7 @@ async function initDb() {
     await pool.query(`UPDATE users SET name=$1, role='super_admin', is_active=TRUE, updated_at=NOW() WHERE email=$2`,[name,ADMIN_EMAIL]);
   }
   console.log('SHAYN database schema and admin-security migration initialized.');
+}
 
 app.get('/api/categories', (req,res) => res.json({ categories:CATEGORY_NAMES, count:CATEGORY_NAMES.length, subcategoryCount:CATEGORY_NAMES.reduce((n,c)=>n+c.children.length,0) }));
 

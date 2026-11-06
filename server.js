@@ -18,7 +18,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '200kb' }));
 app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname,'public')));
 
 const TYPES = new Set(['job','project','service','market']);
 
@@ -203,7 +203,7 @@ app.patch('/api/admin/users/:id/role',auth,superAdmin,asyncRoute(async(req,res)=
   if(!q.rowCount)return res.status(409).json({error:'تعذر تغيير صلاحية هذا الحساب'});
   res.json({user:q.rows[0]});
 }));
-app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'index.html')));
+app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:process.env.NODE_ENV==='production'?'حدث خطأ داخلي':'حدث خطأ داخلي: '+err.message});});
 if(process.argv.includes('--init-db')) initDb().then(()=>pool.end()).catch(e=>{console.error(e);process.exit(1);});
 else {

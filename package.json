@@ -4,11 +4,13 @@
   "private": true,
   "description": "SHAYN Arabic opportunities and services platform",
   "main": "server.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "db:init": "node server.js --init-db",
-    "check": "node --check server.js && node --check app.js"
+    "check": "node --check server.js && node --check public/app.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

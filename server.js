@@ -155,7 +155,7 @@ app.get('/api/me',auth,asyncRoute(async(req,res)=>{
 }));
 app.get('/api/listings',asyncRoute(async(req,res)=>{
   const values=[],where=[`l.status='active'`];
-  if(req.query.type && TYPES.has(req.query.type)){values.push(req.query.type);where.push(`l.type=${values.length}`);}
+  if(req.query.type && TYPES.has(req.query.type)){values.push(req.query.type);where.push(`l.type=$${values.length}`);}
   // Category browsing uses a dedicated filter instead of pretending category
   // labels are free-text product titles. Expand parent categories to their
   // subcategories and support common short labels used by storefront tiles.
@@ -177,7 +177,7 @@ app.get('/api/listings',asyncRoute(async(req,res)=>{
       parent.name.toLocaleLowerCase('ar').includes(canonical.toLocaleLowerCase('ar')) ||
       canonical.toLocaleLowerCase('ar').includes(parent.name.toLocaleLowerCase('ar')))
       ? [parent.name,...parent.children] : [raw,canonical];
-    const clauses=terms.map(term=>{values.push('%'+term+'%');return `COALESCE(l.category,'') ILIKE ${values.length}`;});
+    const clauses=terms.map(term=>{values.push('%'+term+'%');return `COALESCE(l.category,'') ILIKE $${values.length}`;});
     where.push('('+clauses.join(' OR ')+')');
   }
   if(req.query.q){
@@ -186,11 +186,11 @@ app.get('/api/listings',asyncRoute(async(req,res)=>{
     const matched=CATEGORY_NAMES.find(c=>c.name.toLocaleLowerCase('ar').includes(lower) || lower.includes(c.name.toLocaleLowerCase('ar')) || c.children.some(x=>x.toLocaleLowerCase('ar')===lower));
     const terms=matched ? [matched.name,...matched.children] : [term];
     const p=values.length+1; values.push('%'+term+'%');
-    const categoryParams=terms.map(t=>{values.push('%'+t+'%');return `COALESCE(l.category,'') ILIKE ${values.length}`;});
+    const categoryParams=terms.map(t=>{values.push('%'+t+'%');return `COALESCE(l.category,'') ILIKE $${values.length}`;});
     const typeMatch=(/خدمات|خدمة|توصيل|صيانة|تصميم|تصوير|تعليم/.test(lower)) ? " OR l.type='service'" :
       (/منتجات|منتج|تسوق|تسوّق|بضائع/.test(lower)) ? " OR l.type='market'" :
       (/طلبات شراء|طلب شراء/.test(lower)) ? " OR l.type='project'" : "";
-    where.push(`(l.title ILIKE ${p} OR l.description ILIKE ${p} OR ${categoryParams.join(' OR ')}${typeMatch})`);
+    where.push(`(l.title ILIKE $${p} OR l.description ILIKE $${p} OR ${categoryParams.join(' OR ')}${typeMatch})`);
   }
   const q=await pool.query(`SELECT l.id,l.type,l.title,l.description,l.category,l.price,l.currency,l.location,l.image_url,l.entity_name,l.entity_kind,l.website,l.contact_phone,l.created_at,u.name AS owner_name,u.id AS owner_id FROM listings l JOIN users u ON u.id=l.user_id WHERE ${where.join(' AND ')} ORDER BY l.created_at DESC LIMIT 60`,values);
   res.json({listings:q.rows});

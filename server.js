@@ -103,6 +103,7 @@ async function initDb() {
   await pool.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','004_commerce_images.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));
+  await pool.query(fs.readFileSync(path.join(__dirname,'migrations','006_orders.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','002_admin_security.sql'),'utf8'));
   const name = process.env.ADMIN_NAME || 'أمير السوري';
   const password = process.env.ADMIN_PASSWORD;
@@ -235,6 +236,79 @@ app.post('/api/reports',auth,asyncRoute(async(req,res)=>{
   const q=await pool.query('INSERT INTO reports(reporter_id,listing_id,reported_user_id,reason) VALUES($1,$2,$3,$4) RETURNING *',[req.user.id,req.body.listing_id||null,req.body.reported_user_id||null,reason.slice(0,2000)]);
   res.status(201).json({report:q.rows[0]});
 }));
+
+// Orders: checkout records an order in PostgreSQL; payment is not collected online yet.
+app.post('/api/orders',auth,asyncRoute(async(req,res)=>{
+  const items=Array.isArray(req.body.items)?req.body.items:[];
+  const buyerName=String(req.body.buyer_name||'').trim().slice(0,120);
+  const buyerPhone=String(req.body.buyer_phone||'').trim().slice(0,40);
+  const address=String(req.body.delivery_address||'').trim().slice(0,1000);
+  if(!items.length||items.length>20||buyerName.length<2||buyerPhone.length<5||address.length<5)
+    return res.status(400).json({error:'أدخل بيانات التوصيل وأضف منتجاً واحداً على الأقل'});
+  const quantities=new Map();
+  for(const item of items){
+    const id=Number(item.listing_id), qty=Number(item.quantity);
+    if(!Number.isInteger(id)||id<1||!Number.isInteger(qty)||qty<1||qty>50)
+      return res.status(400).json({error:'بيانات المنتجات أو الكميات غير صحيحة'});
+    quantities.set(id,(quantities.get(id)||0)+qty);
+  }
+  if([...quantities.values()].some(q=>q>50)) return res.status(400).json({error:'الحد الأعلى للكمية الواحدة هو 50'});
+  const ids=[...quantities.keys()];
+  const found=await pool.query("SELECT id,user_id,title,price,currency FROM listings WHERE id=ANY($1::bigint[]) AND type='market' AND status='active' AND price IS NOT NULL",[ids]);
+  if(found.rowCount!==ids.length) return res.status(409).json({error:'بعض المنتجات لم تعد متاحة للبيع'});
+  const sellerIds=new Set(found.rows.map(x=>String(x.user_id)));
+  const currencies=new Set(found.rows.map(x=>String(x.currency||'USD')));
+  if(sellerIds.size!==1||currencies.size!==1) return res.status(400).json({error:'لإتمام الطلب، اختر منتجات من بائع واحد وبعملة واحدة'});
+  const products=new Map(found.rows.map(x=>[String(x.id),x]));
+  const total=found.rows.reduce((sum,x)=>sum+Number(x.price)*quantities.get(String(x.id)),0);
+  const client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const order=await client.query(
+      'INSERT INTO orders(buyer_id,seller_id,buyer_name,buyer_phone,delivery_address,total,currency) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [req.user.id,found.rows[0].user_id,buyerName,buyerPhone,address,total,[...currencies][0]]
+    );
+    for(const [id,qty] of quantities){
+      const product=products.get(String(id)), price=Number(product.price);
+      await client.query(
+        'INSERT INTO order_items(order_id,listing_id,product_title,unit_price,quantity,line_total) VALUES($1,$2,$3,$4,$5,$6)',
+        [order.rows[0].id,product.id,product.title,price,qty,price*qty]
+      );
+    }
+    await client.query('COMMIT');
+    res.status(201).json({order:order.rows[0]});
+  }catch(error){await client.query('ROLLBACK');throw error;}
+  finally{client.release();}
+}));
+app.get('/api/orders',auth,asyncRoute(async(req,res)=>{
+  const q=await pool.query(`
+    SELECT o.*,u.name AS seller_name,
+      COALESCE(json_agg(json_build_object('title',i.product_title,'price',i.unit_price,'quantity',i.quantity,'line_total',i.line_total)) FILTER (WHERE i.id IS NOT NULL),'[]'::json) AS items
+    FROM orders o JOIN users u ON u.id=o.seller_id
+    LEFT JOIN order_items i ON i.order_id=o.id
+    WHERE o.buyer_id=$1 GROUP BY o.id,u.name ORDER BY o.created_at DESC LIMIT 100
+  `,[req.user.id]);
+  res.json({orders:q.rows});
+}));
+app.get('/api/seller/orders',auth,asyncRoute(async(req,res)=>{
+  const q=await pool.query(`
+    SELECT o.*,u.name AS buyer_account_name,
+      COALESCE(json_agg(json_build_object('title',i.product_title,'price',i.unit_price,'quantity',i.quantity,'line_total',i.line_total)) FILTER (WHERE i.id IS NOT NULL),'[]'::json) AS items
+    FROM orders o JOIN users u ON u.id=o.buyer_id
+    LEFT JOIN order_items i ON i.order_id=o.id
+    WHERE o.seller_id=$1 GROUP BY o.id,u.name ORDER BY o.created_at DESC LIMIT 100
+  `,[req.user.id]);
+  res.json({orders:q.rows});
+}));
+app.patch('/api/seller/orders/:id',auth,asyncRoute(async(req,res)=>{
+  const status=String(req.body.status||'');
+  if(!['confirmed','preparing','shipped','completed','cancelled'].includes(status))
+    return res.status(400).json({error:'حالة الطلب غير صحيحة'});
+  const q=await pool.query('UPDATE orders SET status=$1,updated_at=NOW() WHERE id=$2 AND seller_id=$3 RETURNING *',[status,req.params.id,req.user.id]);
+  if(!q.rowCount)return res.status(404).json({error:'الطلب غير موجود ضمن طلبات متجرك'});
+  res.json({order:q.rows[0]});
+}));
+
 app.get('/api/admin/overview',auth,admin,asyncRoute(async(req,res)=>{
   const q=await pool.query(`SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM listings) listings,(SELECT COUNT(*) FROM applications) applications,(SELECT COUNT(*) FROM reports WHERE status='open') open_reports`);
   res.json(q.rows[0]);

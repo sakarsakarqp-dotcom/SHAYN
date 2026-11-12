@@ -16,5 +16,28 @@ async function loadListings(){const grid=$('listingGrid');if(!grid)return;grid.i
 function applyTo(id,owner){if(!currentUser){authForm('login');return}openModal('<h2>تواصل مع البائع</h2><form id="applyForm"><label>رسالتك<textarea name="message" required minlength="2" placeholder="اكتب استفسارك عن المنتج أو اطلب تفاصيل إضافية"></textarea></label><button class="primary">إرسال الرسالة</button></form>');$('applyForm').onsubmit=async e=>{e.preventDefault();try{await api('/messages',{method:'POST',body:JSON.stringify({recipient_id:Number(owner),listing_id:Number(id),body:e.target.message.value.trim()})});closeModal();toast('تم إرسال رسالتك إلى البائع')}catch(err){toast(err.message)}}}
 function reportListing(id){if(!currentUser){authForm('login');return}openModal('<h2>الإبلاغ عن إعلان</h2><form id="reportForm"><label>سبب البلاغ<textarea name="reason" required minlength="5"></textarea></label><button class="primary">إرسال البلاغ</button></form>');$('reportForm').onsubmit=async e=>{e.preventDefault();try{await api('/reports',{method:'POST',body:JSON.stringify({...Object.fromEntries(new FormData(e.target)),listing_id:Number(id)})});closeModal();toast('وصل البلاغ إلى فريق المراجعة')}catch(err){toast(err.message)}}}
 async function loadAdmin(){if(!currentUser||!['super_admin','admin','moderator'].includes(currentUser.role))return;try{const d=await api('/admin/overview');$('adminData').innerHTML=Object.entries({المستخدمون:d.users,الإعلانات:d.listings,الطلبات:d.applications,البلاغات_المفتوحة:d.open_reports}).map(([k,v])=>`<div class="stat"><b>${v}</b><span>${k.replace('_',' ')}</span></div>`).join('');const r=await api('/admin/reports');$('adminReports').innerHTML='<h3>أحدث البلاغات</h3>'+ (r.reports.length?r.reports.map(x=>`<div class="listing"><b>بلاغ #${x.id}</b><p>${esc(x.reason)}</p><small>${esc(x.reporter_name)} · ${esc(x.status)}</small><button class="outline" data-resolve="${x.id}">إغلاق البلاغ</button></div>`).join(''):'<p>لا توجد بلاغات.</p>');$('adminReports').querySelectorAll('[data-resolve]').forEach(b=>b.onclick=async()=>{try{await api('/admin/reports/'+b.dataset.resolve,{method:'PATCH',body:JSON.stringify({status:'resolved'})});loadAdmin()}catch(e){toast(e.message)}})}catch(e){toast(e.message)}}
-async function loadCategories(){const el=$('categoryDirectory');if(!el)return;try{const d=await api('/categories');const cats=d.categories||[];$('categoryCount').textContent=cats.length+' مجال';el.innerHTML=cats.map(c=>`<details class="category-group"><summary>${esc(c.name)} <small>${(c.children||[]).length}</small></summary><ul>${(c.children||[]).map(n=>'<li><button type="button" data-category="'+esc(n)+'">'+esc(n)+'</button></li>').join('')}</ul></details>`).join('')||'<div class="empty">سيتم إضافة الأقسام قريباً.</div>';el.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{const input=$('searchInput');if(input)input.value=b.dataset.category;loadListings();$('explore')?.scrollIntoView({behavior:'smooth'})});$('categorySearch').oninput=e=>{const v=e.target.value.trim().toLowerCase();el.querySelectorAll('.category-group').forEach(g=>{g.classList.toggle('hidden',v&&!g.textContent.toLowerCase().includes(v));if(v&&g.textContent.toLowerCase().includes(v))g.open=true})}}catch{$('categoryCount').textContent='';el.innerHTML='<div class="empty">دليل التخصصات قيد التجهيز.</div>'}}
+async function loadCategories(){
+ const el=$('categoryDirectory');if(!el)return;
+ try{
+  const d=await api('/categories');const cats=d.categories||[];
+  $('categoryCount').textContent=cats.length+' قسماً · '+Number(d.totalActiveListings||0)+' إعلاناً منشوراً فعلياً';
+  el.innerHTML=cats.map(c=>`<details class="category-group">
+   <summary><span>${esc(c.name)}</span><small>${Number(c.listingCount||0)} إعلان</small></summary>
+   <div class="category-actions"><button type="button" data-category="${esc(c.name)}">عرض كل القسم</button></div>
+   <ul>${(c.children||[]).map(n=>'<li><button type="button" data-category="'+esc(n)+'">'+esc(n)+'</button></li>').join('')}</ul>
+  </details>`).join('')||'<div class="empty">لا توجد تصنيفات.</div>';
+  el.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{
+   const input=$('searchInput');if(input)input.value=b.dataset.category;
+   if($('typeFilter'))$('typeFilter').value='';
+   loadListings();$('explore')?.scrollIntoView({behavior:'smooth'});
+  });
+  $('categorySearch').oninput=e=>{
+   const v=e.target.value.trim().toLocaleLowerCase('ar');
+   el.querySelectorAll('.category-group').forEach(g=>{
+    const match=!v||g.textContent.toLocaleLowerCase('ar').includes(v);
+    g.classList.toggle('hidden',!match);if(v&&match)g.open=true;
+   });
+  };
+ }catch(e){$('categoryCount').textContent='تعذر تحميل التصنيفات';el.innerHTML='<div class="empty">تعذر تحميل دليل الأقسام: '+esc(e.message)+'</div>'}
+}
 document.addEventListener('DOMContentLoaded',()=>{ document.querySelectorAll('.commerce-tile').forEach(tile=>tile.addEventListener('click',()=>{const input=$('searchInput');if(input)input.value=tile.dataset.query||'';loadListings()})); $('closeModal').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('loginBtn').onclick=()=>authForm('login');$('registerBtn').onclick=()=>authForm('register');$('ctaRegister').onclick=()=>authForm('register');$('logoutBtn').onclick=()=>{token='';currentUser=null;localStorage.removeItem('shayn_token');setAuth(null);toast('تم تسجيل الخروج')};$('postBtn').onclick=listingForm;$('refreshBtn').onclick=loadListings;$('searchBtn').onclick=loadListings;$('typeFilter').onchange=loadListings;$('adminRefresh').onclick=loadAdmin;loadMe();loadListings();loadCategories();});

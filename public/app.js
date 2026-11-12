@@ -61,8 +61,9 @@ function listingForm(preset='market'){
  <label>العملة<select name="currency"><option>USD</option><option>TRY</option><option>SYP</option></select></label>
  <label>المدينة أو نطاق العمل<input name="location" placeholder="المدينة أو نطاق التغطية / عن بعد"></label>
  <button class="primary" type="submit">إرسال الإعلان للمراجعة</button></form>`);
- const typeSelect=$('listingType'), businessFields=$('businessFields'), entityName=$('listingForm').elements.entity_name;
- typeSelect.onchange=()=>{const active=typeSelect.value==='business';businessFields.classList.toggle('hidden',!active);entityName.required=active};
+ const typeSelect=$('listingType'), businessFields=$('businessFields'), entityName=$('listingForm').elements.entity_name, priceInput=$('listingForm').elements.price;
+ const syncListingFields=()=>{const active=typeSelect.value==='business';businessFields.classList.toggle('hidden',!active);entityName.required=active;priceInput.required=typeSelect.value==='market';priceInput.previousElementSibling&&(priceInput.previousElementSibling.textContent=typeSelect.value==='market'?'السعر (مطلوب)':'السعر (اختياري)')};
+ typeSelect.onchange=syncListingFields;syncListingFields();
  $('listingForm').onsubmit=async e=>{e.preventDefault();const body=Object.fromEntries(new FormData(e.target));try{await api('/listings',{method:'POST',body:JSON.stringify(body)});closeModal();toast('وصل إعلانك، وسيظهر بعد اعتماده');loadListings()}catch(err){toast(err.message)}};
 }
 const typeNames={job:'عرض تجاري',project:'طلب شراء',service:'خدمة',market:'منتج للبيع',business:'شركة أو جهة'};

@@ -206,6 +206,7 @@ app.post('/api/listings',auth,asyncRoute(async(req,res)=>{
   if(image && (!/^https:\/\//i.test(image) || image.length>1200)) return res.status(400).json({error:'رابط الصورة يجب أن يبدأ بـ https://'});
   const p=price===''||price==null?null:Number(price);
   if(p!==null&&(!Number.isFinite(p)||p<0)) return res.status(400).json({error:'السعر غير صحيح'});
+  if(type==='market'&&p===null) return res.status(400).json({error:'أدخل سعر المنتج قبل نشره'});
   const q=await pool.query('INSERT INTO listings(user_id,type,title,description,category,price,currency,location,image_url,entity_name,entity_kind,website,contact_phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *',[req.user.id,type,String(title).trim(),String(description).trim(),category||null,p,currency||'USD',location||null,image||null,entity||null,entity_kind||null,site||null,phone||null]);
   res.status(201).json({listing:q.rows[0]});
 }));

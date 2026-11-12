@@ -81,7 +81,8 @@ async function initDb() {
   // existing SHAYN tables by moving the known legacy tables as a single unit.
   await pool.query(`CREATE SCHEMA IF NOT EXISTS ${SHAYN_SCHEMA}`);
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','003_isolate_shayn_schema.sql'),'utf8'));
-  await pool.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));\n  await pool.query(fs.readFileSync(path.join(__dirname,'migrations','004_commerce_images.sql'),'utf8'));
+  await pool.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
+  await pool.query(fs.readFileSync(path.join(__dirname,'migrations','004_commerce_images.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','002_admin_security.sql'),'utf8'));
   const name = process.env.ADMIN_NAME || 'أمير السوري';
   const password = process.env.ADMIN_PASSWORD;
@@ -133,7 +134,8 @@ app.post('/api/listings',auth,asyncRoute(async(req,res)=>{
   const {type,title,description,category,price,currency,location,image_url}=req.body;
   if(!TYPES.has(type)||String(title||'').trim().length<4||String(title).length>180||String(description||'').trim().length<10) return res.status(400).json({error:'تحقق من نوع الإعلان والعنوان والوصف (10 أحرف على الأقل)'});
   const image=String(image_url||'').trim();
-  if(image && (!/^https:\/\//i.test(image) || image.length>1200)) return res.status(400).json({error:'رابط الصورة يجب أن يبدأ بـ https://'});\n  const p=price===''||price==null?null:Number(price);
+  if(image && (!/^https:\/\//i.test(image) || image.length>1200)) return res.status(400).json({error:'رابط الصورة يجب أن يبدأ بـ https://'});
+  const p=price===''||price==null?null:Number(price);
   if(p!==null&&(!Number.isFinite(p)||p<0)) return res.status(400).json({error:'السعر غير صحيح'});
   const q=await pool.query('INSERT INTO listings(user_id,type,title,description,category,price,currency,location,image_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[req.user.id,type,String(title).trim(),String(description).trim(),category||null,p,currency||'USD',location||null,image||null]);
   res.status(201).json({listing:q.rows[0]});

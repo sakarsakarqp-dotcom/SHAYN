@@ -206,5 +206,15 @@ else {
     console.error('JWT_SECRET must be set to a unique random value of at least 32 characters.');
     process.exit(1);
   }
-  app.listen(PORT,()=>console.log(`SHAYN listening on port ${PORT}`));
+  // Safe additive compatibility migration for existing SHAYN databases.
+  // The image column is optional; this never changes or removes existing data.
+  (async () => {
+    try {
+      await pool.query('ALTER TABLE listings ADD COLUMN IF NOT EXISTS image_url TEXT');
+      console.log('SHAYN commerce image field is ready.');
+    } catch (error) {
+      console.error('SHAYN optional image-field migration deferred:', error.message);
+    }
+    app.listen(PORT,()=>console.log(`SHAYN listening on port ${PORT}`));
+  })();
 }

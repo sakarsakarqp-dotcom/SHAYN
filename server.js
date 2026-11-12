@@ -257,17 +257,14 @@ else {
     console.error('JWT_SECRET must be set to a unique random value of at least 32 characters.');
     process.exit(1);
   }
-  // Safe additive compatibility migration for existing SHAYN databases.
-  // The image column is optional; this never changes or removes existing data.
-  (async () => {
-    try {
-      await pool.query('ALTER TABLE listings ADD COLUMN IF NOT EXISTS image_url TEXT');
-      const fs = require('fs');
-      await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));
-      console.log('SHAYN commerce images and business advertising fields are ready.');
-    } catch (error) {
-      console.error('SHAYN optional image-field migration deferred:', error.message);
-    }
-    app.listen(PORT,()=>console.log(`SHAYN listening on port ${PORT}`));
-  })();
+  // Initialize the isolated SHAYN schema and all required tables before
+  // accepting traffic. Previously production only attempted optional columns;
+  // on a fresh database users/listings tables did not exist, breaking signup,
+  // login, category browsing and search.
+  initDb()
+    .then(() => app.listen(PORT,()=>console.log(`SHAYN ready on port ${PORT}`)))
+    .catch(error => {
+      console.error('SHAYN database initialization failed; refusing to serve an empty/broken app:', error);
+      process.exit(1);
+    });
 }

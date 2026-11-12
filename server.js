@@ -77,10 +77,30 @@ async function initDb() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is missing');
   if (!JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET.includes('replace-with')) throw new Error('Set a strong JWT_SECRET (at least 32 characters)');
   const fs = require('fs');
-  // Keep SHAYN isolated from ATHAR's public schema. The migration preserves
-  // existing SHAYN tables by moving the known legacy tables as a single unit.
+  // Keep SHAYN isolated from ATHAR's public schema. Legacy public tables
+  // are moved only by the explicit db:init command, never silently at boot.
   await pool.query(`CREATE SCHEMA IF NOT EXISTS ${SHAYN_SCHEMA}`);
-  await pool.query(fs.readFileSync(path.join(__dirname,'migrations','003_isolate_shayn_schema.sql'),'utf8'));
+  if (process.argv.includes('--init-db')) {
+    await pool.query(fs.readFileSync(path.join(__dirname,'migrations','003_isolate_shayn_schema.sql'),'utf8'));
+  } else {
+    const state = await pool.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM information_schema.tables
+          WHERE table_schema='public' AND table_type='BASE TABLE'
+          AND table_name IN ('users','listings','applications','messages','reviews','reports')) AS legacy_count,
+        (SELECT COUNT(*)::int FROM information_schema.tables
+          WHERE table_schema='shayn' AND table_type='BASE TABLE'
+          AND table_name IN ('users','listings','applications','messages','reviews','reports')) AS target_count
+    `);
+    const legacy = state.rows[0].legacy_count;
+    const target = state.rows[0].target_count;
+    if (legacy > 0 && legacy < 6 && target === 0) {
+      throw new Error('Found a partial set of legacy SHAYN tables in public. Refusing to create empty tables; review the database and run the explicit migration safely.');
+    }
+    if (legacy === 6 && target === 0) {
+      throw new Error('Found the six legacy SHAYN tables in public. Run the explicit npm run db:init migration after confirming a backup; startup will not move data automatically.');
+    }
+  }
   await pool.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','004_commerce_images.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));

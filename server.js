@@ -102,7 +102,7 @@ app.get('/api/categories', asyncRoute(async (req,res) => {
   const counts = q.rows;
   const categories = CATEGORY_NAMES.map(c => {
     const terms = [c.name, ...c.children].map(x => x.toLocaleLowerCase('ar'));
-    const total = counts.filter(x => terms.some(t => x.category.toLocaleLowerCase('ar').includes(t) || t.includes(x.category.toLocaleLowerCase('ar')))).reduce((n,x)=>n+x.total,0);
+    const total = counts.filter(x => x.category && terms.some(t => x.category.toLocaleLowerCase('ar').includes(t) || t.includes(x.category.toLocaleLowerCase('ar')))).reduce((n,x)=>n+x.total,0);
     return {...c, listingCount:total};
   });
   res.json({ categories, count:categories.length, subcategoryCount:categories.reduce((n,c)=>n+c.children.length,0), totalActiveListings:counts.reduce((n,x)=>n+x.total,0) });
@@ -138,7 +138,7 @@ app.get('/api/listings',asyncRoute(async(req,res)=>{
   if(req.query.q){
     const term=String(req.query.q).trim().slice(0,100);
     const lower=term.toLocaleLowerCase('ar');
-    const matched=CATEGORY_NAMES.find(c=>c.name.toLocaleLowerCase('ar')===lower || c.children.some(x=>x.toLocaleLowerCase('ar')===lower));
+    const matched=CATEGORY_NAMES.find(c=>c.name.toLocaleLowerCase('ar').includes(lower) || lower.includes(c.name.toLocaleLowerCase('ar')) || c.children.some(x=>x.toLocaleLowerCase('ar')===lower));
     const terms=matched ? [matched.name,...matched.children] : [term];
     const p=values.length+1; values.push('%'+term+'%');
     const categoryParams=terms.map(t=>{values.push('%'+t+'%');return `COALESCE(l.category,'') ILIKE ${values.length}`;});

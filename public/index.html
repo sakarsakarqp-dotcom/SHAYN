@@ -1,10 +1,50 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#087443"><meta name="description" content="شين - فرصتك تبدأ من هنا"><title>شين | SHAYN</title><link rel="stylesheet" href="/style.css"></head><body><header class="top"><a class="brand" href="/"><span class="mark">ش</span><span>شين <small>SHAYN</small></span></a><nav><a href="#jobs">الوظائف</a><a href="#projects">المشاريع</a><a href="#services">الخدمات</a><a href="#market">السوق</a></nav><div class="actions"><button class="ghost" id="loginBtn">دخول</button><button class="primary" id="registerBtn">إنشاء حساب</button><button class="ghost hidden" id="logoutBtn">خروج</button></div></header>
-<main><section class="hero"><div class="hero-copy"><span class="eyebrow">منصة الفرص والخدمات العربية</span><h1>فرصتك تبدأ<br><em>من هنا.</em></h1><p>مكان واحد يجمع الوظائف والمشاريع والخدمات والسوق. اعرض مهاراتك، ابحث عن فرصتك، وابدأ خطوتك التالية.</p><div class="hero-actions"><a class="primary linkbtn" href="#explore">اكتشف الفرص</a><button class="outline" id="postBtn">أضف إعلانك</button></div><div class="trust"><span>✓ حسابات منظمة</span><span>✓ فرص متنوعة</span><span>✓ تجربة عربية</span></div></div><div class="hero-art"><div class="orb orb1"></div><div class="orb orb2"></div><div class="hero-card"><div class="card-top"><span class="dot"></span><span>مساحتك للفرص</span><b>SHAYN</b></div><div class="big-letter">ش</div><div class="art-bottom"><strong>ابدأ من مكانك</strong><span>وظائف · مشاريع · خدمات · سوق</span></div></div><div class="float-tag tag1">فرص جديدة <b>+</b></div><div class="float-tag tag2">مهاراتك لها قيمة <b>✦</b></div></div></section>
-<section class="searchbar" id="explore"><div><b>ابحث عن فرصتك</b><small>اكتب كلمة أو اختر القسم المناسب</small></div><input id="searchInput" placeholder="مثلاً: مصمم، محاسب، برمجة..."><select id="typeFilter"><option value="">كل الأقسام</option><option value="job">وظائف</option><option value="project">مشاريع</option><option value="service">خدمات</option><option value="market">السوق</option></select><button class="primary" id="searchBtn">بحث</button></section>
-<section class="section" id="sections"><div class="section-head"><div><span class="eyebrow">مساحات شين</span><h2>كل ما تحتاجه، في مكان واحد</h2></div><p>اختر القسم وابدأ التصفح أو أضف فرصتك.</p></div><div class="tiles"><a class="tile" href="#jobs" data-type="job"><span class="tile-icon">▣</span><h3>الوظائف</h3><p>دوام كامل، جزئي، عن بعد، وتدريب.</p><b>استكشف الوظائف ←</b></a><a class="tile" href="#projects" data-type="project"><span class="tile-icon">⌘</span><h3>المشاريع والعمل الحر</h3><p>انشر مشروعك أو قدّم عرضك للعمل.</p><b>استكشف المشاريع ←</b></a><a class="tile" href="#services" data-type="service"><span class="tile-icon">✳</span><h3>الخدمات</h3><p>اعرض خبرتك واطلب خدمات احترافية.</p><b>استكشف الخدمات ←</b></a><a class="tile" href="#market" data-type="market"><span class="tile-icon">◇</span><h3>السوق</h3><p>منتجات وإعلانات وفرص بيع وشراء.</p><b>تصفح السوق ←</b></a><a class="tile tile-dark" href="#trust"><span class="tile-icon">✓</span><h3>الثقة والتوثيق</h3><p>تقييمات وبلاغات ومتابعة موثوقية التعامل.</p><b>اعرف المزيد ←</b></a><a class="tile tile-dark" href="#admin"><span class="tile-icon">⚙</span><h3>الإدارة</h3><p>إدارة الحسابات والإعلانات والبلاغات.</p><b>لوحة الإدارة ←</b></a></div></section>
-<section class="section" id="directory"><div class="section-head"><div><span class="eyebrow">دليل شين الشامل</span><h2>تصفح أكثر من 360 تخصصاً وفرعاً</h2></div><p>30 مجالاً رئيسياً، وتحت كل مجال 12 تصنيفاً فرعياً.</p></div><div class="category-tools"><input id="categorySearch" placeholder="ابحث عن مجال أو تخصص..."><span id="categoryCount">جارٍ تحميل التصنيفات</span></div><div id="categoryDirectory" class="category-directory"><div class="empty">يتم تحميل دليل التصنيفات...</div></div></section>
-<section class="section listings" id="jobs"><div class="section-head"><div><span class="eyebrow">أحدث ما نُشر</span><h2>فرص وإعلانات مضافة</h2></div><button class="outline" id="refreshBtn">تحديث القائمة ↻</button></div><div id="listingGrid" class="listing-grid"><div class="empty">يتم تحميل الإعلانات...</div></div></section>
-<section class="cta" id="trust"><div><span class="eyebrow">ابدأ اليوم</span><h2>مهارتك تستحق فرصة.</h2><p>أنشئ حسابك وشارك ما تقدمه مع مجتمع شين.</p></div><button class="lightbtn" id="ctaRegister">أنشئ حساباً مجاناً</button></section>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0c563b">
+<meta name="description" content="شين SHAYN — سوق مواد البناء والمورّدين والمقاولين وخدمات الإعمار.">
+<title>شين | SHAYN — سوق البناء والإعمار</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+ <a class="brand" href="/"><span class="mark">ش</span><span>شين <small>SHAYN</small></span></a>
+ <nav><a href="#sections">الأقسام</a><a href="#jobs">الإعلانات</a><a href="#how">كيف تعمل شين؟</a></nav>
+ <div class="actions"><button class="ghost" id="loginBtn">دخول</button><button class="primary" id="registerBtn">حساب جديد</button><button class="ghost hidden" id="logoutBtn">خروج</button></div>
+</header>
+<main>
+<section class="hero construction-hero">
+ <div class="hero-copy">
+  <span class="eyebrow">منصتك لسوق البناء والإعمار</span>
+  <h1>كل ما يحتاجه<br><em>مشروعك… بمكان واحد.</em></h1>
+  <p>اكتشف مواد البناء، تواصل مع المورّدين والمقاولين، واعرض خدماتك ومنتجاتك ضمن سوق يجمع أهل المهنة.</p>
+  <div class="hero-actions"><a class="primary linkbtn" href="#sections">اكتشف السوق</a><button class="outline" id="postBtn">أضف إعلانك</button></div>
+  <div class="trust"><span>✓ موردون وخدمات</span><span>✓ فرص ومشاريع</span><span>✓ تجربة عربية سهلة</span></div>
+ </div>
+ <div class="hero-art photo-hero">
+  <div class="hero-photo-main"></div>
+  <div class="photo-float float-one"><span class="float-icon">▦</span><span><b>مواد ومستلزمات</b><small>كل احتياجات الورشة</small></span></div>
+  <div class="photo-float float-two"><span class="float-icon">⌂</span><span><b>مشاريع ومقاولون</b><small>ابدأ تواصلك الآن</small></span></div>
+  <div class="hero-stamp">SHAYN <b>شين</b></div>
+ </div>
+</section>
+<section class="searchbar" id="explore"><div><b>ابحث في سوق شين</b><small>عن مادة، خدمة، أو مشروع</small></div><input id="searchInput" placeholder="مثلاً: إسمنت، حديد، دهان، مقاول..."><select id="typeFilter"><option value="">كل الإعلانات</option><option value="job">مواد البناء</option><option value="project">مشاريع ومقاولون</option><option value="service">خدمات مهنية</option><option value="market">معدات وأدوات</option></select><button class="primary" id="searchBtn">ابحث الآن</button></section>
+<section class="section" id="sections">
+ <div class="section-head"><div><span class="eyebrow">تسوّق وتواصل بثقة</span><h2>كل قطاع البناء في متناولك</h2></div><p>اختر القسم المناسب وابدأ رحلتك.</p></div>
+ <div class="tiles visual-tiles">
+  <a class="tile photo-tile" href="#jobs" data-type="job"><img src="https://images.unsplash.com/photo-158109 building" onerror="this.style.display='none'" alt=""><span class="tile-shade"></span><span class="tile-content"><span class="tile-icon">▦</span><h3>مواد البناء</h3><p>إسمنت، حديد، بلوك، رمل، حصى ومواد الإكساء.</p><b>تصفح المواد ←</b></span></a>
+  <a class="tile photo-tile" href="#jobs" data-type="project"><img src="https://images.unsplash.com/photo-1504307651254-35680f356dfd" alt="أعمال ومشاريع بناء"><span class="tile-shade"></span><span class="tile-content"><span class="tile-icon">⌂</span><h3>المشاريع والمقاولون</h3><p>اعثر على منفذين ومقاولين، أو اعرض مشروعك.</p><b>اكتشف المشاريع ←</b></span></a>
+  <a class="tile photo-tile" href="#jobs" data-type="service"><img src="https://images.unsplash.com/photo-1503387762-592dee58c266" alt="تصميم ومخططات هندسية"><span class="tile-shade"></span><span class="tile-content"><span class="tile-icon">✳</span><h3>الخدمات المهنية</h3><p>هندسة، تصميم، صيانة، نقل، وتركيب.</p><b>اكتشف الخدمات ←</b></span></a>
+  <a class="tile photo-tile" href="#jobs" data-type="market"><img src="https://images.unsplash.com/photo-1581244277943-fe4a9c777189" alt="معدات وأدوات العمل"><span class="tile-shade"></span><span class="tile-content"><span class="tile-icon">⚒</span><h3>المعدات والأدوات</h3><p>معدات الورش والآليات والأدوات المستعملة والجديدة.</p><b>تصفح السوق ←</b></span></a>
+ </div>
+</section>
+<section class="section how-section" id="how"><div class="section-head"><div><span class="eyebrow">خطوات بسيطة</span><h2>كيف تعمل شين؟</h2></div><p>من البحث إلى التواصل، بخطوات واضحة.</p></div><div class="steps"><article><b>01</b><h3>ابحث عن احتياجك</h3><p>اكتب اسم المادة أو الخدمة وحدد القسم.</p></article><article><b>02</b><h3>قارن الخيارات</h3><p>تصفح الإعلانات والتفاصيل المتاحة.</p></article><article><b>03</b><h3>تواصل مباشرة</h3><p>سجّل دخولك وابدأ التواصل أو أضف إعلانك.</p></article></div></section>
+<section class="section listings" id="jobs"><div class="section-head"><div><span class="eyebrow">السوق يتحرك</span><h2>أحدث الإعلانات</h2></div><button class="outline" id="refreshBtn">تحديث القائمة ↻</button></div><div id="listingGrid" class="listing-grid"><div class="empty">يتم تحميل الإعلانات...</div></div></section>
+<section class="cta"><div><span class="eyebrow">مكانك بين أهل المهنة</span><h2>عندك مادة أو خدمة؟ خلّي السوق يعرفك.</h2><p>أنشئ حسابك وأضف إعلانك إلى مجتمع شين.</p></div><button class="lightbtn" id="ctaRegister">انضم إلى شين مجاناً</button></section>
 <section class="section admin-section hidden" id="admin"><div class="section-head"><div><span class="eyebrow">إدارة المنصة</span><h2>لوحة المدير</h2></div><button class="outline" id="adminRefresh">تحديث</button></div><div id="adminData" class="stats"></div><div id="adminReports"></div></section>
-</main><footer><a class="brand" href="/"><span class="mark">ش</span><span>شين <small>SHAYN</small></span></a><span>فرصتك تبدأ من هنا</span><small>© SHAYN — جميع الحقوق محفوظة</small></footer>
-<div class="modal hidden" id="modal"><div class="dialog"><button class="close" id="closeModal">×</button><div id="modalContent"></div></div></div><div class="toast" id="toast"></div><script src="/app.js"></script></body></html>
+</main>
+<footer><a class="brand" href="/"><span class="mark">ش</span><span>شين <small>SHAYN</small></span></a><span>سوق البناء والإعمار</span><small>© SHAYN — جميع الحقوق محفوظة</small></footer>
+<div class="modal hidden" id="modal"><div class="dialog"><button class="close" id="closeModal">×</button><div id="modalContent"></div></div></div><div class="toast" id="toast"></div><script src="/app.js"></script>
+</body></html>

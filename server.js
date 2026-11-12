@@ -238,7 +238,9 @@ else {
   (async () => {
     try {
       await pool.query('ALTER TABLE listings ADD COLUMN IF NOT EXISTS image_url TEXT');
-      console.log('SHAYN commerce image field is ready.');
+      const fs = require('fs');
+      await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));
+      console.log('SHAYN commerce images and business advertising fields are ready.');
     } catch (error) {
       console.error('SHAYN optional image-field migration deferred:', error.message);
     }

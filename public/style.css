@@ -89,3 +89,12 @@ footer{border-color:#e6edf1;color:#7b8a96}footer>span{font-weight:700;color:#516
 @media(max-width:900px){.global-hero{grid-template-columns:1fr;padding:45px 7% 35px;gap:0}.global-hero .hero-copy{text-align:center}.global-hero .hero-copy>p{margin:0 auto}.global-hero .hero-actions,.hero-proof{justify-content:center}.globe-stage{height:430px}.commerce-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.top{height:68px;padding:0 4%}.global-hero{padding:40px 6% 22px}.global-hero h1{font-size:43px}.global-hero .hero-copy>p{font-size:13px}.hero-proof{gap:13px;font-size:10px}.globe-stage{height:330px;margin-top:5px}.globe{width:260px}.globe-halo{width:310px;height:310px}.halo-b{width:340px;height:340px}.orbit{width:350px;height:130px}.orbit-two{width:360px;height:150px}.chip-top{top:25px;right:-5px}.chip-bottom{bottom:34px;left:-5px}.float-chip{padding:9px 11px}.float-chip b{font-size:10px}.float-chip small{font-size:9px}.globe-caption{font-size:9px;bottom:0}.ticker{padding:11px 0}.ticker-track{gap:23px}.searchbar{width:92%;padding:15px;gap:9px}.searchbar input{flex-basis:100%}.searchbar select{width:100%}.searchbar button{flex:1}.section{padding:60px 6%}.section-head h2{font-size:24px}.commerce-tiles{grid-template-columns:1fr}.commerce-tile{min-height:235px}.cta{margin:0 5% 50px;padding:27px}.cta h2{font-size:24px}footer{gap:12px;flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.globe,.globe-map,.halo-a,.halo-b,.float-chip,.live-dot,.ticker-track,.globe-pin{animation:none!important}}
+
+/* Commerce product cards */
+.product-card{overflow:hidden;padding:0 0 18px;display:flex;flex-direction:column;min-height:100%}
+.product-card .product-image{width:100%;height:205px;object-fit:cover;background:#eef3f5;display:block;margin-bottom:14px}
+.product-card .kind,.product-card h3,.product-card>p,.product-card .listing-foot,.product-card>div{margin-left:18px;margin-right:18px}
+.product-card .kind{margin-top:0}
+.product-card h3{margin-top:8px}
+.product-card>p{flex:1}
+.product-card .listing-foot{margin-top:auto}

@@ -11,7 +11,8 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Alswrya255@gmail.com').trim().toLowerCase();
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined) });
+const SHAYN_SCHEMA = 'shayn';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${SHAYN_SCHEMA}`, ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined) });
 
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -88,6 +89,10 @@ async function initDb() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is missing');
   if (!JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET.includes('replace-with')) throw new Error('Set a strong JWT_SECRET (at least 32 characters)');
   const fs = require('fs');
+  // Keep SHAYN isolated from ATHAR's public schema. The migration preserves
+  // existing SHAYN tables by moving the known legacy tables as a single unit.
+  await pool.query(`CREATE SCHEMA IF NOT EXISTS ${SHAYN_SCHEMA}`);
+  await pool.query(fs.readFileSync(path.join(__dirname,'migrations','003_isolate_shayn_schema.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','002_admin_security.sql'),'utf8'));
   const name = process.env.ADMIN_NAME || 'أمير السوري';

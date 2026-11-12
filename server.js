@@ -21,7 +21,7 @@ app.use(express.urlencoded({ extended: false, limit: '50kb' }));
 app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.use(express.static(path.join(__dirname,'public')));
 
-const TYPES = new Set(['job','project','service','market']);
+const TYPES = new Set(['job','project','service','market','business']);
 
 const CATEGORY_NAMES = [
   ['الأزياء والملابس','ملابس نسائية','ملابس رجالية','ملابس أطفال','أحذية','حقائب','إكسسوارات','ساعات','ملابس رياضية','ملابس مناسبات'],
@@ -83,6 +83,7 @@ async function initDb() {
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','003_isolate_shayn_schema.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','004_commerce_images.sql'),'utf8'));
+  await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','002_admin_security.sql'),'utf8'));
   const name = process.env.ADMIN_NAME || 'أمير السوري';
   const password = process.env.ADMIN_PASSWORD;
@@ -147,17 +148,21 @@ app.get('/api/listings',asyncRoute(async(req,res)=>{
       (/طلبات شراء|طلب شراء/.test(lower)) ? " OR l.type='project'" : "";
     where.push(`(l.title ILIKE ${p} OR l.description ILIKE ${p} OR ${categoryParams.join(' OR ')}${typeMatch})`);
   }
-  const q=await pool.query(`SELECT l.id,l.type,l.title,l.description,l.category,l.price,l.currency,l.location,l.image_url,l.created_at,u.name AS owner_name,u.id AS owner_id FROM listings l JOIN users u ON u.id=l.user_id WHERE ${where.join(' AND ')} ORDER BY l.created_at DESC LIMIT 60`,values);
+  const q=await pool.query(`SELECT l.id,l.type,l.title,l.description,l.category,l.price,l.currency,l.location,l.image_url,l.entity_name,l.entity_kind,l.website,l.contact_phone,l.created_at,u.name AS owner_name,u.id AS owner_id FROM listings l JOIN users u ON u.id=l.user_id WHERE ${where.join(' AND ')} ORDER BY l.created_at DESC LIMIT 60`,values);
   res.json({listings:q.rows});
 }));
 app.post('/api/listings',auth,asyncRoute(async(req,res)=>{
-  const {type,title,description,category,price,currency,location,image_url}=req.body;
+  const {type,title,description,category,price,currency,location,image_url,entity_name,entity_kind,website,contact_phone}=req.body;
   if(!TYPES.has(type)||String(title||'').trim().length<4||String(title).length>180||String(description||'').trim().length<10) return res.status(400).json({error:'تحقق من نوع الإعلان والعنوان والوصف (10 أحرف على الأقل)'});
+  const entity=String(entity_name||'').trim(), site=String(website||'').trim(), phone=String(contact_phone||'').trim();
+  if(type==='business' && entity.length<2) return res.status(400).json({error:'أدخل اسم الشركة أو الجهة'});
+  if(site && (!/^https:\/\//i.test(site)||site.length>300)) return res.status(400).json({error:'رابط الموقع يجب أن يبدأ بـ https://'});
+  if(phone.length>40) return res.status(400).json({error:'رقم التواصل طويل جداً'});
   const image=String(image_url||'').trim();
   if(image && (!/^https:\/\//i.test(image) || image.length>1200)) return res.status(400).json({error:'رابط الصورة يجب أن يبدأ بـ https://'});
   const p=price===''||price==null?null:Number(price);
   if(p!==null&&(!Number.isFinite(p)||p<0)) return res.status(400).json({error:'السعر غير صحيح'});
-  const q=await pool.query('INSERT INTO listings(user_id,type,title,description,category,price,currency,location,image_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[req.user.id,type,String(title).trim(),String(description).trim(),category||null,p,currency||'USD',location||null,image||null]);
+  const q=await pool.query('INSERT INTO listings(user_id,type,title,description,category,price,currency,location,image_url,entity_name,entity_kind,website,contact_phone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *',[req.user.id,type,String(title).trim(),String(description).trim(),category||null,p,currency||'USD',location||null,image||null,entity||null,entity_kind||null,site||null,phone||null]);
   res.status(201).json({listing:q.rows[0]});
 }));
 app.post('/api/listings/:id/apply',auth,asyncRoute(async(req,res)=>{

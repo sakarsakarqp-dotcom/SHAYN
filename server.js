@@ -132,7 +132,8 @@ app.get('/api/listings',asyncRoute(async(req,res)=>{
 app.post('/api/listings',auth,asyncRoute(async(req,res)=>{
   const {type,title,description,category,price,currency,location,image_url}=req.body;
   if(!TYPES.has(type)||String(title||'').trim().length<4||String(title).length>180||String(description||'').trim().length<10) return res.status(400).json({error:'تحقق من نوع الإعلان والعنوان والوصف (10 أحرف على الأقل)'});
-  const image=String(image_url||'').trim();\n  if(image && (!/^https:\/\//i.test(image) || image.length>1200)) return res.status(400).json({error:'رابط الصورة يجب أن يبدأ بـ https://'});\n  const p=price===''||price==null?null:Number(price);
+  const image=String(image_url||'').trim();
+  if(image && (!/^https:\/\//i.test(image) || image.length>1200)) return res.status(400).json({error:'رابط الصورة يجب أن يبدأ بـ https://'});\n  const p=price===''||price==null?null:Number(price);
   if(p!==null&&(!Number.isFinite(p)||p<0)) return res.status(400).json({error:'السعر غير صحيح'});
   const q=await pool.query('INSERT INTO listings(user_id,type,title,description,category,price,currency,location,image_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[req.user.id,type,String(title).trim(),String(description).trim(),category||null,p,currency||'USD',location||null,image||null]);
   res.status(201).json({listing:q.rows[0]});

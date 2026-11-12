@@ -97,7 +97,16 @@ async function initDb() {
   console.log('SHAYN database schema and admin-security migration initialized.');
 }
 
-app.get('/api/categories', (req,res) => res.json({ categories:CATEGORY_NAMES, count:CATEGORY_NAMES.length, subcategoryCount:CATEGORY_NAMES.reduce((n,c)=>n+c.children.length,0) }));
+app.get('/api/categories', asyncRoute(async (req,res) => {
+  const q = await pool.query("SELECT COALESCE(category,'') AS category, type, COUNT(*)::int AS total FROM listings WHERE status='active' GROUP BY category,type");
+  const counts = q.rows;
+  const categories = CATEGORY_NAMES.map(c => {
+    const terms = [c.name, ...c.children].map(x => x.toLocaleLowerCase('ar'));
+    const total = counts.filter(x => terms.some(t => x.category.toLocaleLowerCase('ar').includes(t) || t.includes(x.category.toLocaleLowerCase('ar')))).reduce((n,x)=>n+x.total,0);
+    return {...c, listingCount:total};
+  });
+  res.json({ categories, count:categories.length, subcategoryCount:categories.reduce((n,c)=>n+c.children.length,0), totalActiveListings:counts.reduce((n,x)=>n+x.total,0) });
+}));
 
 app.get('/api/health', asyncRoute(async (req,res) => {
   await pool.query('SELECT 1');
@@ -126,7 +135,18 @@ app.get('/api/me',auth,asyncRoute(async(req,res)=>{
 app.get('/api/listings',asyncRoute(async(req,res)=>{
   const values=[],where=[`l.status='active'`];
   if(req.query.type && TYPES.has(req.query.type)){values.push(req.query.type);where.push(`l.type=$${values.length}`);}
-  if(req.query.q){values.push('%'+String(req.query.q).slice(0,100)+'%');where.push(`(l.title ILIKE $${values.length} OR l.description ILIKE $${values.length} OR COALESCE(l.category,'') ILIKE $${values.length})`);}
+  if(req.query.q){
+    const term=String(req.query.q).trim().slice(0,100);
+    const lower=term.toLocaleLowerCase('ar');
+    const matched=CATEGORY_NAMES.find(c=>c.name.toLocaleLowerCase('ar')===lower || c.children.some(x=>x.toLocaleLowerCase('ar')===lower));
+    const terms=matched ? [matched.name,...matched.children] : [term];
+    const p=values.length+1; values.push('%'+term+'%');
+    const categoryParams=terms.map(t=>{values.push('%'+t+'%');return `COALESCE(l.category,'') ILIKE ${values.length}`;});
+    const typeMatch=(/خدمات|خدمة|توصيل|صيانة|تصميم|تصوير|تعليم/.test(lower)) ? " OR l.type='service'" :
+      (/منتجات|منتج|تسوق|تسوّق|بضائع/.test(lower)) ? " OR l.type='market'" :
+      (/طلبات شراء|طلب شراء/.test(lower)) ? " OR l.type='project'" : "";
+    where.push(`(l.title ILIKE ${p} OR l.description ILIKE ${p} OR ${categoryParams.join(' OR ')}${typeMatch})`);
+  }
   const q=await pool.query(`SELECT l.id,l.type,l.title,l.description,l.category,l.price,l.currency,l.location,l.image_url,l.created_at,u.name AS owner_name,u.id AS owner_id FROM listings l JOIN users u ON u.id=l.user_id WHERE ${where.join(' AND ')} ORDER BY l.created_at DESC LIMIT 60`,values);
   res.json({listings:q.rows});
 }));

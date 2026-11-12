@@ -260,7 +260,7 @@ app.post('/api/orders',auth,asyncRoute(async(req,res)=>{
   const currencies=new Set(found.rows.map(x=>String(x.currency||'USD')));
   if(sellerIds.size!==1||currencies.size!==1) return res.status(400).json({error:'لإتمام الطلب، اختر منتجات من بائع واحد وبعملة واحدة'});
   const products=new Map(found.rows.map(x=>[String(x.id),x]));
-  const total=found.rows.reduce((sum,x)=>sum+Number(x.price)*quantities.get(String(x.id)),0);
+  const total=found.rows.reduce((sum,x)=>sum+Number(x.price)*quantities.get(Number(x.id)),0);
   const client=await pool.connect();
   try{
     await client.query('BEGIN');

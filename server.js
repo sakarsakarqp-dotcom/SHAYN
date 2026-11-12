@@ -135,7 +135,31 @@ app.get('/api/me',auth,asyncRoute(async(req,res)=>{
 }));
 app.get('/api/listings',asyncRoute(async(req,res)=>{
   const values=[],where=[`l.status='active'`];
-  if(req.query.type && TYPES.has(req.query.type)){values.push(req.query.type);where.push(`l.type=$${values.length}`);}
+  if(req.query.type && TYPES.has(req.query.type)){values.push(req.query.type);where.push(`l.type=${values.length}`);}
+  // Category browsing uses a dedicated filter instead of pretending category
+  // labels are free-text product titles. Expand parent categories to their
+  // subcategories and support common short labels used by storefront tiles.
+  if(req.query.category){
+    const raw=String(req.query.category).trim().slice(0,120);
+    const lower=raw.toLocaleLowerCase('ar');
+    const aliases={
+      'إلكترونيات':'الهواتف والإلكترونيات','الالكترونيات':'الهواتف والإلكترونيات',
+      'أزياء':'الأزياء والملابس','الموضة':'الأزياء والملابس',
+      'المنزل':'المنزل والأثاث','الجمال':'الجمال والعناية',
+      'السيارات':'السيارات والمركبات','خدمات':'الخدمات','الخدمات والأعمال':'الخدمات'
+    };
+    const canonical=aliases[lower]||raw;
+    const parent=CATEGORY_NAMES.find(c=>c.name.toLocaleLowerCase('ar')===canonical.toLocaleLowerCase('ar') ||
+      c.name.toLocaleLowerCase('ar').includes(canonical.toLocaleLowerCase('ar')) ||
+      canonical.toLocaleLowerCase('ar').includes(c.name.toLocaleLowerCase('ar')) ||
+      c.children.some(x=>x.toLocaleLowerCase('ar')===canonical.toLocaleLowerCase('ar')));
+    const terms=parent && (parent.name.toLocaleLowerCase('ar')===canonical.toLocaleLowerCase('ar') ||
+      parent.name.toLocaleLowerCase('ar').includes(canonical.toLocaleLowerCase('ar')) ||
+      canonical.toLocaleLowerCase('ar').includes(parent.name.toLocaleLowerCase('ar')))
+      ? [parent.name,...parent.children] : [raw,canonical];
+    const clauses=terms.map(term=>{values.push('%'+term+'%');return `COALESCE(l.category,'') ILIKE ${values.length}`;});
+    where.push('('+clauses.join(' OR ')+')');
+  }
   if(req.query.q){
     const term=String(req.query.q).trim().slice(0,100);
     const lower=term.toLocaleLowerCase('ar');

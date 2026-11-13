@@ -10,7 +10,7 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'Alswrya255@gmail.com').trim().toLowerCase();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 const SHAYN_SCHEMA = 'shayn';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${SHAYN_SCHEMA}`, ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined) });
 
@@ -75,6 +75,9 @@ const issueToken = u => jwt.sign({ id: u.id }, JWT_SECRET, { expiresIn: '7d' });
 async function initDb() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is missing');
   if (!JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET.includes('replace-with')) throw new Error('Set a strong JWT_SECRET (at least 32 characters)');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ADMIN_EMAIL)) throw new Error('Set ADMIN_EMAIL in private environment settings');
+  const adminName = String(process.env.ADMIN_NAME || '').trim();
+  if (adminName.length < 2 || adminName.length > 120) throw new Error('Set ADMIN_NAME in private environment settings');
   const fs = require('fs');
   // Keep SHAYN isolated from ATHAR's public schema. Legacy public tables
   // are moved only by the explicit db:init command, never silently at boot.
@@ -105,15 +108,15 @@ async function initDb() {
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','006_orders.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','002_admin_security.sql'),'utf8'));
-  const name = process.env.ADMIN_NAME || 'أمير السوري';
   const password = process.env.ADMIN_PASSWORD;
-  if (password) {
-    const hash = await bcrypt.hash(password, 12);
-    await pool.query(`INSERT INTO users(name,email,password_hash,role,is_active) VALUES($1,$2,$3,'super_admin',TRUE)
-      ON CONFLICT(email) DO UPDATE SET name=EXCLUDED.name, role='super_admin', password_hash=EXCLUDED.password_hash, is_active=TRUE, updated_at=NOW()`,[name,ADMIN_EMAIL,hash]);
+  const existingAdmin = await pool.query('SELECT id FROM users WHERE email=$1',[ADMIN_EMAIL]);
+  if (existingAdmin.rowCount) {
+    // لا نعيد تعيين كلمة مرور المدير عند كل إعادة تشغيل للخدمة.
+    await pool.query(`UPDATE users SET name=$1, role='super_admin', is_active=TRUE, updated_at=NOW() WHERE email=$2`,[adminName,ADMIN_EMAIL]);
   } else {
-    // إذا كان الحساب قد أُنشئ سابقاً، نرفع صلاحياته دون تغيير كلمة مروره.
-    await pool.query(`UPDATE users SET name=$1, role='super_admin', is_active=TRUE, updated_at=NOW() WHERE email=$2`,[name,ADMIN_EMAIL]);
+    if (!password || password.length < 14) throw new Error('ADMIN_PASSWORD must contain at least 14 characters when creating the first administrator account');
+    const hash = await bcrypt.hash(password, 12);
+    await pool.query(`INSERT INTO users(name,email,password_hash,role,is_active) VALUES($1,$2,$3,'super_admin',TRUE)`,[adminName,ADMIN_EMAIL,hash]);
   }
   console.log('SHAYN database schema and admin-security migration initialized.');
 }
@@ -311,7 +314,7 @@ app.patch('/api/seller/orders/:id',auth,asyncRoute(async(req,res)=>{
 }));
 
 app.get('/api/admin/overview',auth,admin,asyncRoute(async(req,res)=>{
-  const q=await pool.query(`SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM listings) listings,(SELECT COUNT(*) FROM applications) applications,(SELECT COUNT(*) FROM reports WHERE status='open') open_reports`);
+  const q=await pool.query(`SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM listings) listings,(SELECT COUNT(*) FROM orders) orders,(SELECT COUNT(*) FROM applications) applications,(SELECT COUNT(*) FROM reports WHERE status='open') open_reports`);
   res.json(q.rows[0]);
 }));
 app.get('/api/admin/listings',auth,admin,asyncRoute(async(req,res)=>{

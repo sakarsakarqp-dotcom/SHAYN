@@ -314,7 +314,7 @@ app.patch('/api/seller/orders/:id',auth,asyncRoute(async(req,res)=>{
 }));
 
 app.get('/api/admin/overview',auth,admin,asyncRoute(async(req,res)=>{
-  const q=await pool.query(`SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM listings) listings,(SELECT COUNT(*) FROM applications) applications,(SELECT COUNT(*) FROM reports WHERE status='open') open_reports`);
+  const q=await pool.query(`SELECT (SELECT COUNT(*) FROM users) users,(SELECT COUNT(*) FROM listings) listings,(SELECT COUNT(*) FROM orders) orders,(SELECT COUNT(*) FROM applications) applications,(SELECT COUNT(*) FROM reports WHERE status='open') open_reports`);
   res.json(q.rows[0]);
 }));
 app.get('/api/admin/listings',auth,admin,asyncRoute(async(req,res)=>{

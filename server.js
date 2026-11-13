@@ -75,7 +75,7 @@ const issueToken = u => jwt.sign({ id: u.id }, JWT_SECRET, { expiresIn: '7d' });
 async function initDb() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is missing');
   if (!JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET.includes('replace-with')) throw new Error('Set a strong JWT_SECRET (at least 32 characters)');
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(ADMIN_EMAIL)) throw new Error('Set ADMIN_EMAIL in private environment settings');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ADMIN_EMAIL)) throw new Error('Set ADMIN_EMAIL in private environment settings');
   const adminName = String(process.env.ADMIN_NAME || '').trim();
   if (adminName.length < 2 || adminName.length > 120) throw new Error('Set ADMIN_NAME in private environment settings');
   const fs = require('fs');

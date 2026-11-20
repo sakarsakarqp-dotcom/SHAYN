@@ -25,12 +25,14 @@ model User {
   receivedMessages   Message[]                 @relation("MessageRecipient")
   reviewsGiven       Review[]                  @relation("ReviewReviewer")
   reviewsReceived    Review[]                  @relation("ReviewSubject")
-  reports            Report[]
+  reports            Report[]                   @relation("ReportReporter")
+  reportsAgainst     Report[]                   @relation("ReportSubject")
   buyerOrders        Order[]                   @relation("OrderBuyer")
   sellerOrders       Order[]                   @relation("OrderSeller")
   roles              UserRole[]
   ownedOrganizations Organization[]            @relation("OrganizationOwner")
   memberships        OrganizationMembership[]
+  membershipsInvited OrganizationMembership[]  @relation("MembershipInviter")
   invitationsCreated OrganizationInvitation[]  @relation("InvitationCreator")
   invitationsAccepted OrganizationInvitation[] @relation("InvitationAcceptor")
   auditActions       OrganizationAuditLog[]    @relation("OrganizationAuditActor")
@@ -122,7 +124,8 @@ model Report {
   reason         String
   status         String    @default("open") @db.VarChar(20)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  reporter       User      @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reporter       User      @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User?     @relation("ReportSubject", fields: [reportedUserId], references: [id], onDelete: Cascade)
   listing        Listing?  @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@map("reports")

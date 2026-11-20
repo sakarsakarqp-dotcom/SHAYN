@@ -1,0 +1,21 @@
+name: SHAYN Prisma schema
+on:
+  pull_request:
+    paths:
+      - "prisma/**"
+      - "migrations/007_identity_organizations.sql"
+      - ".github/workflows/prisma-schema.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate Prisma schema
+        run: npx --yes prisma@6.19.0 validate --schema prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shayn?schema=shayn

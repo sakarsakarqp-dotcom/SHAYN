@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 
 const app = express();
@@ -13,6 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 const SHAYN_SCHEMA = 'shayn';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${SHAYN_SCHEMA}`, ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined) });
+let identitySchemaReady = false;
 
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -70,6 +72,10 @@ function superAdmin(req,res,next) {
   if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'هذه العملية متاحة للمدير الأعلى فقط' });
   next();
 }
+function identitySchemaRequired(req,res,next) {
+  if (!identitySchemaReady) return res.status(503).json({error:'وحدة المؤسسات لم تُهيأ بعد؛ نفّذ ترحيل الهوية ثم أعد تشغيل الخدمة'});
+  next();
+}
 const issueToken = u => jwt.sign({ id: u.id }, JWT_SECRET, { expiresIn: '7d' });
 
 async function initDb() {
@@ -108,6 +114,13 @@ async function initDb() {
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','006_orders.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','002_admin_security.sql'),'utf8'));
+  const identityTables = await pool.query(
+    "SELECT COUNT(*)::int AS total FROM information_schema.tables " +
+    "WHERE table_schema='shayn' AND table_type='BASE TABLE' " +
+    "AND table_name = ANY($1::text[])",
+    [['user_roles','organizations','organization_memberships','organization_invitations','organization_audit_logs']]
+  );
+  identitySchemaReady = identityTables.rows[0].total === 5;
   const password = process.env.ADMIN_PASSWORD;
   const existingAdmin = await pool.query('SELECT id FROM users WHERE email=$1',[ADMIN_EMAIL]);
   if (existingAdmin.rowCount) {
@@ -156,6 +169,255 @@ app.get('/api/me',auth,asyncRoute(async(req,res)=>{
   if(!q.rowCount) return res.status(404).json({error:'الحساب غير موجود'});
   res.json({user:q.rows[0]});
 }));
+
+const PROFESSIONAL_ROLES = new Set(['job_seeker','employer','freelancer','service_provider','seller','buyer']);
+const ORGANIZATION_KINDS = new Set(['company','ngo','public_entity','store','team','other']);
+const ORGANIZATION_MEMBER_ROLES = new Set(['admin','recruiter','project_manager','commerce_manager','member']);
+const ORGANIZATION_MANAGERS = new Set(['owner','admin']);
+
+async function loadOrganizationMembership(req,res,allowedRoles) {
+  const id = String(req.params.id || '');
+  if (!/^[1-9]\d{0,17}$/.test(id)) {
+    res.status(400).json({error:'معرّف المؤسسة غير صحيح'});
+    return null;
+  }
+  const q = await pool.query(
+    'SELECT o.id AS organization_id,o.name,o.slug,o.kind,o.status,m.role,m.status AS membership_status ' +
+    'FROM organizations o JOIN organization_memberships m ON m.organization_id=o.id ' +
+    'WHERE o.id=$1 AND m.user_id=$2 AND m.status=$3',
+    [id,req.user.id,'active']
+  );
+  if (!q.rowCount) {
+    res.status(403).json({error:'لا تملك عضوية فعالة في هذه المؤسسة'});
+    return null;
+  }
+  const membership = q.rows[0];
+  const hasAllowedRole = !allowedRoles || (allowedRoles instanceof Set ? allowedRoles.has(membership.role) : allowedRoles.includes(membership.role));
+  if (!hasAllowedRole) {
+    res.status(403).json({error:'لا تملك صلاحية تنفيذ هذا الإجراء داخل المؤسسة'});
+    return null;
+  }
+  return membership;
+}
+
+// Professional roles are self-selected profile capabilities, never platform-admin privileges.
+app.get('/api/me/roles',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const q = await pool.query(
+    'SELECT role,created_at FROM user_roles WHERE user_id=$1 ORDER BY role',
+    [req.user.id]
+  );
+  res.json({roles:q.rows});
+}));
+app.put('/api/me/roles',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  if (!Array.isArray(req.body.roles) || req.body.roles.length > PROFESSIONAL_ROLES.size) {
+    return res.status(400).json({error:'أرسل قائمة صحيحة بالصفات المهنية'});
+  }
+  const roles = [...new Set(req.body.roles.map(value=>String(value)))];
+  if (roles.some(role=>!PROFESSIONAL_ROLES.has(role))) {
+    return res.status(400).json({error:'تتضمن القائمة صفة مهنية غير مسموح بها'});
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM user_roles WHERE user_id=$1',[req.user.id]);
+    for (const role of roles) {
+      await client.query('INSERT INTO user_roles(user_id,role) VALUES($1,$2)',[req.user.id,role]);
+    }
+    await client.query('COMMIT');
+    res.json({roles});
+  } catch(error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.get('/api/organizations',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const q = await pool.query(
+    'SELECT o.id,o.name,o.slug,o.kind,o.description,o.country_code,o.status,o.created_at,' +
+    'm.role AS membership_role,m.status AS membership_status ' +
+    'FROM organizations o JOIN organization_memberships m ON m.organization_id=o.id ' +
+    'WHERE m.user_id=$1 AND m.status=$2 ORDER BY o.created_at DESC LIMIT 100',
+    [req.user.id,'active']
+  );
+  res.json({organizations:q.rows});
+}));
+app.post('/api/organizations',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const name = String(req.body.name || '').trim();
+  const slug = String(req.body.slug || '').trim().toLowerCase();
+  const kind = String(req.body.kind || 'company');
+  const description = String(req.body.description || '').trim();
+  const countryCode = String(req.body.country_code || 'SY').trim().toUpperCase();
+  if (name.length < 2 || name.length > 160 ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug.length > 160 ||
+      !ORGANIZATION_KINDS.has(kind) || description.length > 4000 ||
+      !/^[A-Z]{2}$/.test(countryCode)) {
+    return res.status(400).json({error:'تحقق من اسم المؤسسة والرابط المختصر والنوع والبلد'});
+  }
+  const requiredRoles = {
+    company:['employer'],
+    ngo:['employer'],
+    public_entity:['employer'],
+    store:['seller'],
+    team:['freelancer','service_provider'],
+    other:['employer','seller','service_provider']
+  }[kind];
+  const roleCheck = await pool.query(
+    'SELECT role FROM user_roles WHERE user_id=$1 AND role=ANY($2::varchar[])',
+    [req.user.id,requiredRoles]
+  );
+  if (!roleCheck.rowCount) {
+    return res.status(403).json({error:'أضف الصفة المهنية المناسبة إلى حسابك قبل إنشاء هذه المؤسسة'});
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const created = await client.query(
+      'INSERT INTO organizations(name,slug,kind,description,country_code,owner_user_id) ' +
+      'VALUES($1,$2,$3,$4,$5,$6) RETURNING id,name,slug,kind,description,country_code,status,created_at',
+      [name,slug,kind,description || null,countryCode,req.user.id]
+    );
+    const organization = created.rows[0];
+    await client.query(
+      'INSERT INTO organization_memberships(organization_id,user_id,role,status) VALUES($1,$2,$3,$4)',
+      [organization.id,req.user.id,'owner','active']
+    );
+    await client.query(
+      'INSERT INTO organization_audit_logs(organization_id,actor_user_id,action,details) VALUES($1,$2,$3,$4::jsonb)',
+      [organization.id,req.user.id,'organization.created',JSON.stringify({kind,slug,country_code:countryCode})]
+    );
+    await client.query('COMMIT');
+    res.status(201).json({organization,membership_role:'owner'});
+  } catch(error) {
+    await client.query('ROLLBACK');
+    if (error.code === '23505') return res.status(409).json({error:'الرابط المختصر مستخدم مسبقاً'});
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+app.get('/api/organizations/:id',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const membership = await loadOrganizationMembership(req,res,null);
+  if (!membership) return;
+  const q = await pool.query(
+    'SELECT id,name,slug,kind,description,country_code,status,created_at,updated_at ' +
+    'FROM organizations WHERE id=$1',
+    [membership.organization_id]
+  );
+  res.json({organization:q.rows[0],membership_role:membership.role});
+}));
+app.get('/api/organizations/:id/members',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const membership = await loadOrganizationMembership(req,res,['owner','admin']);
+  if (!membership) return;
+  const q = await pool.query(
+    'SELECT m.user_id,u.name,u.email,m.role,m.status,m.created_at ' +
+    'FROM organization_memberships m JOIN users u ON u.id=m.user_id ' +
+    'WHERE m.organization_id=$1 ORDER BY m.created_at ASC LIMIT 200',
+    [membership.organization_id]
+  );
+  res.json({members:q.rows});
+}));
+app.post('/api/organizations/:id/invitations',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const membership = await loadOrganizationMembership(req,res,ORGANIZATION_MANAGERS);
+  if (!membership) return;
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const role = String(req.body.role || 'member');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255 ||
+      !ORGANIZATION_MEMBER_ROLES.has(role)) {
+    return res.status(400).json({error:'البريد أو صلاحية العضوية غير صحيحة'});
+  }
+  if (email === String(req.user.email).toLowerCase()) {
+    return res.status(409).json({error:'أنت عضو في المؤسسة بالفعل'});
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const created = await client.query(
+      'INSERT INTO organization_invitations(organization_id,email,role,token_hash,invited_by_user_id,expires_at) ' +
+      "VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '7 days') " +
+      'RETURNING id,email,role,status,expires_at',
+      [membership.organization_id,email,role,tokenHash,req.user.id]
+    );
+    await client.query(
+      'INSERT INTO organization_audit_logs(organization_id,actor_user_id,action,details) VALUES($1,$2,$3,$4::jsonb)',
+      [membership.organization_id,req.user.id,'organization.invitation.created',JSON.stringify({invitation_id:created.rows[0].id,email,role})]
+    );
+    await client.query('COMMIT');
+    res.status(201).json({
+      invitation:created.rows[0],
+      invite_token:token,
+      delivery:'manual',
+      message:'لم يُفعّل إرسال البريد بعد؛ شارك رمز الدعوة مع الشخص المقصود عبر قناة آمنة'
+    });
+  } catch(error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+app.post('/api/organizations/invitations/accept',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const token = String(req.body.token || '').trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(token)) return res.status(400).json({error:'رمز الدعوة غير صحيح'});
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const found = await client.query(
+      'SELECT id,organization_id,email,role,status,expires_at,invited_by_user_id ' +
+      'FROM organization_invitations WHERE token_hash=$1 FOR UPDATE',
+      [tokenHash]
+    );
+    if (!found.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({error:'الدعوة غير موجودة أو لم تعد صالحة'});
+    }
+    const invitation = found.rows[0];
+    if (invitation.status !== 'pending' || new Date(invitation.expires_at).getTime() <= Date.now()) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({error:'انتهت صلاحية الدعوة أو تم استخدامها سابقاً'});
+    }
+    if (String(invitation.email).toLowerCase() !== String(req.user.email).toLowerCase()) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({error:'يجب تسجيل الدخول بالبريد الذي تلقيت عليه الدعوة'});
+    }
+    await client.query(
+      'INSERT INTO organization_memberships(organization_id,user_id,role,status,invited_by_user_id) ' +
+      "VALUES($1,$2,$3,'active',$4) " +
+      "ON CONFLICT (organization_id,user_id) DO UPDATE SET role=EXCLUDED.role,status='active',invited_by_user_id=EXCLUDED.invited_by_user_id,updated_at=NOW()",
+      [invitation.organization_id,req.user.id,invitation.role,invitation.invited_by_user_id]
+    );
+    await client.query(
+      "UPDATE organization_invitations SET status='accepted',accepted_by_user_id=$1,accepted_at=NOW() WHERE id=$2",
+      [req.user.id,invitation.id]
+    );
+    await client.query(
+      'INSERT INTO organization_audit_logs(organization_id,actor_user_id,target_user_id,action,details) VALUES($1,$2,$3,$4,$5::jsonb)',
+      [invitation.organization_id,req.user.id,req.user.id,'organization.invitation.accepted',JSON.stringify({invitation_id:invitation.id,role:invitation.role})]
+    );
+    await client.query('COMMIT');
+    res.json({organization_id:invitation.organization_id,role:invitation.role,status:'active'});
+  } catch(error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+app.get('/api/organizations/:id/audit',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
+  const membership = await loadOrganizationMembership(req,res,ORGANIZATION_MANAGERS);
+  if (!membership) return;
+  const q = await pool.query(
+    'SELECT id,actor_user_id,target_user_id,action,details,created_at ' +
+    'FROM organization_audit_logs WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 100',
+    [membership.organization_id]
+  );
+  res.json({audit_logs:q.rows});
+}));
+
 app.get('/api/listings',asyncRoute(async(req,res)=>{
   const values=[],where=[`l.status='active'`];
   if(req.query.type && TYPES.has(req.query.type)){values.push(req.query.type);where.push(`l.type=$${values.length}`);}

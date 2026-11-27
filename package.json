@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node server.js",
     "db:init": "node server.js --init-db",
-    "check": "node --check server.js && node --check public/app.js"
+    "check": "node --check server.js && node --check public/app.js",
+    "db:migrate:identity": "node scripts/apply-identity-migration.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

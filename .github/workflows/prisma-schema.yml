@@ -1,0 +1,115 @@
+name: SHAYN identity and Prisma checks
+on:
+  pull_request:
+    paths:
+      - "prisma/**"
+      - "server.js"
+      - "package.json"
+      - "tests/**"
+      - "migrations/007_identity_organizations.sql"
+      - ".github/workflows/prisma-schema.yml"
+      - "schema.sql"
+      - "migrations/002_admin_security.sql"
+      - "migrations/004_commerce_images.sql"
+      - "migrations/005_business_ads.sql"
+      - "migrations/006_orders.sql"
+  workflow_dispatch:
+
+jobs:
+  prisma-and-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shayn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d shayn_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shayn_test
+      PGPASSWORD: postgres
+      NODE_ENV: test
+      PORT: 3000
+      JWT_SECRET: ci-only-secret-that-is-longer-than-thirty-two-characters
+      ADMIN_EMAIL: ci-admin@example.test
+      ADMIN_NAME: CI Administrator
+      ADMIN_PASSWORD: CI-Strong-Admin-Password-2026!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check server and client syntax
+        run: npm run check
+      - name: Prepare isolated SHAYN schema
+        run: psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -c "CREATE SCHEMA shayn"
+      - name: Apply existing schema and additive migrations
+        env:
+          PGOPTIONS: "-c search_path=shayn"
+        run: |
+          psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -f schema.sql
+          psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -f migrations/002_admin_security.sql
+          psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -f migrations/004_commerce_images.sql
+          psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -f migrations/005_business_ads.sql
+          psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -f migrations/006_orders.sql
+          psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -f migrations/007_identity_organizations.sql
+      - name: Smoke-test multi-role accounts and organization relationships
+        env:
+          PGOPTIONS: "-c search_path=shayn"
+        run: |
+          psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO users(name,email,password_hash) VALUES
+            ('Test Owner','owner@example.test','not-a-real-password-hash'),
+            ('Test Member','member@example.test','not-a-real-password-hash');
+          INSERT INTO user_roles(user_id,role) VALUES
+            (1,'employer'),(1,'buyer'),(2,'freelancer');
+          INSERT INTO organizations(name,slug,owner_user_id,status)
+            VALUES ('Test Organization','test-organization',1,'active');
+          INSERT INTO organization_memberships(organization_id,user_id,role,status)
+            VALUES (1,1,'owner','active'),(1,2,'member','active');
+          INSERT INTO organization_invitations(
+            organization_id,email,role,token_hash,invited_by_user_id,expires_at
+          ) VALUES (1,'invitee@example.test','recruiter',repeat('a',64),1,NOW()+INTERVAL '1 day');
+          INSERT INTO organization_audit_logs(organization_id,actor_user_id,action)
+            VALUES (1,1,'test.organization.created');
+          DO $$
+          BEGIN
+            BEGIN
+              INSERT INTO user_roles(user_id,role) VALUES (1,'platform_admin');
+              RAISE EXCEPTION 'Invalid professional role was unexpectedly accepted';
+            EXCEPTION WHEN check_violation THEN
+              NULL;
+            END;
+          END $$;
+          SQL
+      - name: Validate Prisma schema
+        run: npx --yes prisma@6.19.0 validate --schema prisma/schema.prisma
+
+      - name: Start API against the temporary PostgreSQL database
+        run: |
+          npm start > /tmp/shayn-api.log 2>&1 &
+          echo $! > /tmp/shayn-api.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/shayn-api.log
+          exit 1
+      - name: Exercise role and organization API authorization
+        run: |
+          if [ -f tests/organization-api.test.js ]; then
+            node --test tests/organization-api.test.js
+          else
+            echo "Organization API integration test will run when the implementation branch is reviewed."
+          fi

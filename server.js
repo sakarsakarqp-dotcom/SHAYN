@@ -14,6 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 const SHAYN_SCHEMA = 'shayn';
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${SHAYN_SCHEMA}`, ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined) });
+let identitySchemaReady = false;
 
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -71,6 +72,10 @@ function superAdmin(req,res,next) {
   if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'هذه العملية متاحة للمدير الأعلى فقط' });
   next();
 }
+function identitySchemaRequired(req,res,next) {
+  if (!identitySchemaReady) return res.status(503).json({error:'وحدة المؤسسات لم تُهيأ بعد؛ نفّذ ترحيل الهوية ثم أعد تشغيل الخدمة'});
+  next();
+}
 const issueToken = u => jwt.sign({ id: u.id }, JWT_SECRET, { expiresIn: '7d' });
 
 async function initDb() {
@@ -108,8 +113,14 @@ async function initDb() {
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','004_commerce_images.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','005_business_ads.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','006_orders.sql'),'utf8'));
-  await pool.query(fs.readFileSync(path.join(__dirname,'migrations','007_identity_organizations.sql'),'utf8'));
   await pool.query(fs.readFileSync(path.join(__dirname,'migrations','002_admin_security.sql'),'utf8'));
+  const identityTables = await pool.query(
+    "SELECT COUNT(*)::int AS total FROM information_schema.tables " +
+    "WHERE table_schema='shayn' AND table_type='BASE TABLE' " +
+    "AND table_name = ANY($1::text[])",
+    [['user_roles','organizations','organization_memberships','organization_invitations','organization_audit_logs']]
+  );
+  identitySchemaReady = identityTables.rows[0].total === 5;
   const password = process.env.ADMIN_PASSWORD;
   const existingAdmin = await pool.query('SELECT id FROM users WHERE email=$1',[ADMIN_EMAIL]);
   if (existingAdmin.rowCount) {
@@ -189,14 +200,14 @@ async function loadOrganizationMembership(req,res,allowedRoles) {
 }
 
 // Professional roles are self-selected profile capabilities, never platform-admin privileges.
-app.get('/api/me/roles',auth,asyncRoute(async(req,res)=>{
+app.get('/api/me/roles',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const q = await pool.query(
     'SELECT role,created_at FROM user_roles WHERE user_id=$1 ORDER BY role',
     [req.user.id]
   );
   res.json({roles:q.rows});
 }));
-app.put('/api/me/roles',auth,asyncRoute(async(req,res)=>{
+app.put('/api/me/roles',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   if (!Array.isArray(req.body.roles) || req.body.roles.length > PROFESSIONAL_ROLES.size) {
     return res.status(400).json({error:'أرسل قائمة صحيحة بالصفات المهنية'});
   }
@@ -221,7 +232,7 @@ app.put('/api/me/roles',auth,asyncRoute(async(req,res)=>{
   }
 }));
 
-app.get('/api/organizations',auth,asyncRoute(async(req,res)=>{
+app.get('/api/organizations',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const q = await pool.query(
     'SELECT o.id,o.name,o.slug,o.kind,o.description,o.country_code,o.status,o.created_at,' +
     'm.role AS membership_role,m.status AS membership_status ' +
@@ -231,7 +242,7 @@ app.get('/api/organizations',auth,asyncRoute(async(req,res)=>{
   );
   res.json({organizations:q.rows});
 }));
-app.post('/api/organizations',auth,asyncRoute(async(req,res)=>{
+app.post('/api/organizations',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const name = String(req.body.name || '').trim();
   const slug = String(req.body.slug || '').trim().toLowerCase();
   const kind = String(req.body.kind || 'company');
@@ -285,7 +296,7 @@ app.post('/api/organizations',auth,asyncRoute(async(req,res)=>{
     client.release();
   }
 }));
-app.get('/api/organizations/:id',auth,asyncRoute(async(req,res)=>{
+app.get('/api/organizations/:id',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const membership = await loadOrganizationMembership(req,res,null);
   if (!membership) return;
   const q = await pool.query(
@@ -295,7 +306,7 @@ app.get('/api/organizations/:id',auth,asyncRoute(async(req,res)=>{
   );
   res.json({organization:q.rows[0],membership_role:membership.role});
 }));
-app.get('/api/organizations/:id/members',auth,asyncRoute(async(req,res)=>{
+app.get('/api/organizations/:id/members',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const membership = await loadOrganizationMembership(req,res,['owner','admin']);
   if (!membership) return;
   const q = await pool.query(
@@ -306,7 +317,7 @@ app.get('/api/organizations/:id/members',auth,asyncRoute(async(req,res)=>{
   );
   res.json({members:q.rows});
 }));
-app.post('/api/organizations/:id/invitations',auth,asyncRoute(async(req,res)=>{
+app.post('/api/organizations/:id/invitations',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const membership = await loadOrganizationMembership(req,res,ORGANIZATION_MANAGERS);
   if (!membership) return;
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -347,7 +358,7 @@ app.post('/api/organizations/:id/invitations',auth,asyncRoute(async(req,res)=>{
     client.release();
   }
 }));
-app.post('/api/organizations/invitations/accept',auth,asyncRoute(async(req,res)=>{
+app.post('/api/organizations/invitations/accept',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const token = String(req.body.token || '').trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(token)) return res.status(400).json({error:'رمز الدعوة غير صحيح'});
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -395,7 +406,7 @@ app.post('/api/organizations/invitations/accept',auth,asyncRoute(async(req,res)=
     client.release();
   }
 }));
-app.get('/api/organizations/:id/audit',auth,asyncRoute(async(req,res)=>{
+app.get('/api/organizations/:id/audit',auth,identitySchemaRequired,asyncRoute(async(req,res)=>{
   const membership = await loadOrganizationMembership(req,res,ORGANIZATION_MANAGERS);
   if (!membership) return;
   const q = await pool.query(

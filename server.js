@@ -192,7 +192,8 @@ async function loadOrganizationMembership(req,res,allowedRoles) {
     return null;
   }
   const membership = q.rows[0];
-  if (allowedRoles && !allowedRoles.includes(membership.role)) {
+  const hasAllowedRole = !allowedRoles || (allowedRoles instanceof Set ? allowedRoles.has(membership.role) : allowedRoles.includes(membership.role));
+  if (!hasAllowedRole) {
     res.status(403).json({error:'لا تملك صلاحية تنفيذ هذا الإجراء داخل المؤسسة'});
     return null;
   }

@@ -109,7 +109,7 @@ test('multi-role and organization API enforces membership and platform boundarie
     token: ownerToken,
     body: { email: memberEmail, role: 'recruiter' }
   });
-  assert.equal(invitation.status, 201);
+  assert.equal(invitation.status, 201, JSON.stringify(invitation.data));
   assert.match(invitation.data.invite_token, /^[a-f0-9]{64}$/);
   assert.equal(invitation.data.delivery, 'manual');
 

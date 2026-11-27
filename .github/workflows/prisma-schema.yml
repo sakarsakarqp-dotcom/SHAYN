@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - "prisma/**"
+      - "server.js"
+      - "package.json"
+      - "tests/**"
       - "migrations/007_identity_organizations.sql"
       - ".github/workflows/prisma-schema.yml"
       - "schema.sql"
@@ -30,13 +33,23 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shayn_test?schema=shayn
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shayn_test
       PGPASSWORD: postgres
+      NODE_ENV: test
+      PORT: 3000
+      JWT_SECRET: ci-only-secret-that-is-longer-than-thirty-two-characters
+      ADMIN_EMAIL: ci-admin@example.test
+      ADMIN_NAME: CI Administrator
+      ADMIN_PASSWORD: CI-Strong-Admin-Password-2026!
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install application dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check server and client syntax
+        run: npm run check
       - name: Prepare isolated SHAYN schema
         run: psql -h localhost -U postgres -d shayn_test -v ON_ERROR_STOP=1 -c "CREATE SCHEMA shayn"
       - name: Apply existing schema and additive migrations
@@ -80,3 +93,23 @@ jobs:
           SQL
       - name: Validate Prisma schema
         run: npx --yes prisma@6.19.0 validate --schema prisma/schema.prisma
+
+      - name: Start API against the temporary PostgreSQL database
+        run: |
+          npm start > /tmp/shayn-api.log 2>&1 &
+          echo $! > /tmp/shayn-api.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/shayn-api.log
+          exit 1
+      - name: Exercise role and organization API authorization
+        run: |
+          if [ -f tests/organization-api.test.js ]; then
+            node --test tests/organization-api.test.js
+          else
+            echo "Organization API integration test will run when the implementation branch is reviewed."
+          fi
